@@ -10,5 +10,5 @@ static const char BAD_GATEWAY [] = "HTTP/1.1 502 Bad Gateway\r\n\r\n";
 static const char CRLF [] = "\r\n";
 static const char OK [] = "HTTP/1.1 200 OK\r\n\r\n";
 static const char HOST_REGEX [] = R"(^Host:\s*(.+?)\s*$)";
-
+static const char IP_PORT_REGEX [] = R"(([\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}):([\d]{1,5}))";
 #endif // DEFINES_H

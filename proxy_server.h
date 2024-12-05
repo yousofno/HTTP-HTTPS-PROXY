@@ -29,7 +29,8 @@ public:
   ~proxy_server();
 private slots:
   void service();
-  void socket_err(QAbstractSocket::SocketError);
+  void socket_err(QAbstractSocket::SocketError error);
+  void closeSocket(QAbstractSocket::SocketState state);
   void readFromSocket();
 
 private:

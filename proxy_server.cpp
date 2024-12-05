@@ -31,6 +31,7 @@ void proxy_server::service(){
         QTcpSocket *my_soc = ser->nextPendingConnection();
         connect(my_soc , SIGNAL(readyRead()) , this , SLOT(readFromSocket()));
         connect(my_soc , SIGNAL(error(QAbstractSocket::SocketError)) , this , SLOT(socket_err(QAbstractSocket::SocketError)));
+        connect(my_soc , SIGNAL(stateChanged(QAbstractSocket::SocketState)) , this, SLOT(socket_err(QAbstractSocket::SocketError)));
     }
 }
 
@@ -76,7 +77,7 @@ void proxy_server::readFromSocket(){
         if (match.hasMatch()) {
             isHttps = false;
             host = match.captured(1);
-            port = 80;
+            port = 80;//TODO::fill it with regix
         }
     }
 
@@ -91,12 +92,12 @@ void proxy_server::readFromSocket(){
     remote_socket->setProxy(*this->proxy);
     connect(remote_socket , SIGNAL(error(QAbstractSocket::SocketError)) , this , SLOT(socket_err(QAbstractSocket::SocketError)));
     connect(remote_socket , SIGNAL(readyRead()) , this , SLOT(readFromSocket()));
+    connect(remote_socket , SIGNAL(stateChanged(QAbstractSocket::SocketState)) , this, SLOT(socket_err(QAbstractSocket::SocketError)));
     this->proxy_list->insert(bm_type::value_type(incomming_socket, remote_socket));
     QObject::connect(remote_socket , &QTcpSocket::connected , this ,[this ,isHttps,answer, incomming_socket]() {
         if(this->proxy_list->left.find(incomming_socket) == this->proxy_list->left.end()){
             return;
         }
-
         if(isHttps){
             if(incomming_socket != nullptr){
             if(incomming_socket->state() == QAbstractSocket::ConnectedState){
@@ -107,7 +108,6 @@ void proxy_server::readFromSocket(){
             this->proxy_list->left.at(incomming_socket)->write(answer);
         }
 
-
     });
     remote_socket->connectToHost(host , port);
     return;
@@ -115,7 +115,7 @@ void proxy_server::readFromSocket(){
 
 
 
-void proxy_server::socket_err(QAbstractSocket::SocketError) {
+void proxy_server::socket_err(QAbstractSocket::SocketError error) {
     QTcpSocket *sock = reinterpret_cast<QTcpSocket *>(sender());
     if (this->proxy_list->right.find(sock) != this->proxy_list->right.end()) {
         if(this->proxy_list->right.at(sock) != nullptr){
@@ -143,3 +143,37 @@ void proxy_server::socket_err(QAbstractSocket::SocketError) {
     sock = nullptr;
 
 }
+
+
+
+void proxy_server::closeSocket(QAbstractSocket::SocketState state){
+    if(state == QAbstractSocket::SocketState::ClosingState){
+         QTcpSocket *sock = reinterpret_cast<QTcpSocket *>(sender());
+        if (this->proxy_list->right.find(sock) != this->proxy_list->right.end()) {
+            if(this->proxy_list->right.at(sock) != nullptr){
+                this->proxy_list->right.at(sock)->deleteLater();
+            }
+            this->proxy_list->right.erase(sock);
+            sock->close();
+            sock->deleteLater();
+            sock = nullptr;
+            return;
+        }else if (this->proxy_list->left.find(sock) != this->proxy_list->left.end()) {
+            if(this->proxy_list->left.at(sock) != nullptr){
+                this->proxy_list->left.at(sock)->deleteLater();
+            }
+            this->proxy_list->left.erase(sock);
+            sock->close();
+            sock->deleteLater();
+            sock = nullptr;
+            return;
+        }
+        sock->close();
+        sock->deleteLater();
+        sock = nullptr;
+    }
+
+}
+
+
+
