@@ -5,20 +5,12 @@
 #include "proxy_server.h"
 proxy_server::proxy_server(QObject* parent): QObject(parent) {
     proxy_list = new bm_type();
-    ser = new QTcpServer();
     proxy = new QNetworkProxy();
     proxy->setType(QNetworkProxy::NoProxy);
-    connect(ser , SIGNAL(newConnection()) , this , SLOT(service()));
+    connect(this , SIGNAL(startConnection(QTcpSocket*)) , this , SLOT(service(QTcpSocket*)));
+}
 
-}
-bool proxy_server::start_proxy_server(QHostAddress address , quint64 port) {
-    if(ser->listen(address, port)){
-        return  true;
-    }
-    return false;
-}
 proxy_server::~proxy_server() {
-    delete ser;
     delete proxy;
     for(auto index  = proxy_list->begin(); index != proxy_list->end();index++){
         index->left->deleteLater();
@@ -26,12 +18,10 @@ proxy_server::~proxy_server() {
     }
 }
 
-void proxy_server::service(){
-    if(ser->hasPendingConnections()){
-        QTcpSocket *my_soc = ser->nextPendingConnection();
-        connect(my_soc , SIGNAL(readyRead()) , this , SLOT(readFromSocket()));
-        connect(my_soc , SIGNAL(error(QAbstractSocket::SocketError)) , this , SLOT(socket_err(QAbstractSocket::SocketError)));
-        connect(my_soc , SIGNAL(stateChanged(QAbstractSocket::SocketState)) , this, SLOT(socket_err(QAbstractSocket::SocketError)));
+void proxy_server::service(QTcpSocket* socket){
+    if(socket != nullptr){
+        connect(socket , SIGNAL(readyRead()) , this , SLOT(readFromSocket()));
+        connect(socket , SIGNAL(error(QAbstractSocket::SocketError)) , this , SLOT(socket_err(QAbstractSocket::SocketError)));
     }
 }
 
@@ -45,6 +35,7 @@ void proxy_server::readFromSocket(){
     if (this->proxy_list->left.find(incomming_socket) != this->proxy_list->left.end()) {
         if(this->proxy_list->left.at(incomming_socket)->state() == QAbstractSocket::ConnectedState){
             this->proxy_list->left.at(incomming_socket)->write(answer);
+       //     qDebug()<<QDateTime::currentMSecsSinceEpoch()<<" "<<incomming_socket->peerAddress()<<" "<<getpid();
         }
         return;
     }
@@ -53,6 +44,7 @@ void proxy_server::readFromSocket(){
     if (this->proxy_list->right.find(incomming_socket) != this->proxy_list->right.end()) {
         if(this->proxy_list->right.at(incomming_socket)->state() == QAbstractSocket::ConnectedState){
             this->proxy_list->right.at(incomming_socket)->write(answer);
+      //      qDebug()<<QDateTime::currentMSecsSinceEpoch()<<" "<< this->proxy_list->right.at(incomming_socket)->peerAddress()<<" "<<getpid();
         }
         return;
     }
@@ -92,7 +84,6 @@ void proxy_server::readFromSocket(){
     remote_socket->setProxy(*this->proxy);
     connect(remote_socket , SIGNAL(error(QAbstractSocket::SocketError)) , this , SLOT(socket_err(QAbstractSocket::SocketError)));
     connect(remote_socket , SIGNAL(readyRead()) , this , SLOT(readFromSocket()));
-    connect(remote_socket , SIGNAL(stateChanged(QAbstractSocket::SocketState)) , this, SLOT(socket_err(QAbstractSocket::SocketError)));
     this->proxy_list->insert(bm_type::value_type(incomming_socket, remote_socket));
     QObject::connect(remote_socket , &QTcpSocket::connected , this ,[this ,isHttps,answer, incomming_socket]() {
         if(this->proxy_list->left.find(incomming_socket) == this->proxy_list->left.end()){
@@ -145,35 +136,6 @@ void proxy_server::socket_err(QAbstractSocket::SocketError error) {
 }
 
 
-
-void proxy_server::closeSocket(QAbstractSocket::SocketState state){
-    if(state == QAbstractSocket::SocketState::ClosingState){
-         QTcpSocket *sock = reinterpret_cast<QTcpSocket *>(sender());
-        if (this->proxy_list->right.find(sock) != this->proxy_list->right.end()) {
-            if(this->proxy_list->right.at(sock) != nullptr){
-                this->proxy_list->right.at(sock)->deleteLater();
-            }
-            this->proxy_list->right.erase(sock);
-            sock->close();
-            sock->deleteLater();
-            sock = nullptr;
-            return;
-        }else if (this->proxy_list->left.find(sock) != this->proxy_list->left.end()) {
-            if(this->proxy_list->left.at(sock) != nullptr){
-                this->proxy_list->left.at(sock)->deleteLater();
-            }
-            this->proxy_list->left.erase(sock);
-            sock->close();
-            sock->deleteLater();
-            sock = nullptr;
-            return;
-        }
-        sock->close();
-        sock->deleteLater();
-        sock = nullptr;
-    }
-
-}
 
 
 

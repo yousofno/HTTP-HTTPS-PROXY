@@ -13,7 +13,6 @@
 #include <QObject>
 #include <QTcpServer>
 #include <QTcpSocket>
-#include <Qthread>
 #include <boost/bimap.hpp>
 #include <boost/bimap/multiset_of.hpp>
 #include <boost/bimap/set_of.hpp>
@@ -24,19 +23,18 @@ typedef boost::bimap<QTcpSocket *, QTcpSocket* > bm_type;
 class proxy_server : public QObject {
   Q_OBJECT
 public:
-  proxy_server(QObject *parent);
-  bool start_proxy_server(QHostAddress address , quint64 port);
+  proxy_server(QObject *parent = 0);
   ~proxy_server();
 private slots:
-  void service();
+  void service(QTcpSocket* scket);
   void socket_err(QAbstractSocket::SocketError error);
-  void closeSocket(QAbstractSocket::SocketState state);
   void readFromSocket();
+  signals:
+  void startConnection(QTcpSocket* socket);
 
 private:
   // customer req_port->socket_clinet,socket_remote_server
   bm_type *proxy_list;
-  QTcpServer *ser;
   QNetworkProxy *proxy;
 };
 
