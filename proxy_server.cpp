@@ -3,13 +3,24 @@
 //
 
 #include "proxy_server.h"
-proxy_server::proxy_server(QObject* parent): QObject(parent) {
+proxy_server::proxy_server(  QMutex * mut ,  std::queue<QString> * qu  , QObject *parent): QObject(parent) {
     proxy_list = new bm_type();
     proxy = new QNetworkProxy();
     proxy->setType(QNetworkProxy::NoProxy);
+    this->mut = mut;
+    this->qu = qu;
     connect(this , SIGNAL(startConnection(QTcpSocket*)) , this , SLOT(service(QTcpSocket*)));
+    connect(this , SIGNAL(sendLog(QString)) , this , SLOT(writeLog(QString)));
 }
 
+void proxy_server::writeLog(QString mssg){
+    if(this->mut->tryLock(500)){
+        this->qu->push(mssg);
+        this->mut->unlock();
+        return;
+    }
+  emit sendLog(mssg);
+}
 proxy_server::~proxy_server() {
     delete proxy;
     for(auto index  = proxy_list->begin(); index != proxy_list->end();index++){
@@ -35,7 +46,7 @@ void proxy_server::readFromSocket(){
     if (this->proxy_list->left.find(incomming_socket) != this->proxy_list->left.end()) {
         if(this->proxy_list->left.at(incomming_socket)->state() == QAbstractSocket::ConnectedState){
             this->proxy_list->left.at(incomming_socket)->write(answer);
-       //     qDebug()<<QDateTime::currentMSecsSinceEpoch()<<" "<<incomming_socket->peerAddress()<<" "<<getpid();
+            emit writeLog(QString(QString::number(QDateTime::currentMSecsSinceEpoch())+" " + incomming_socket->peerAddress().toString() + " " + QString::number(getpid())));
         }
         return;
     }
@@ -44,18 +55,16 @@ void proxy_server::readFromSocket(){
     if (this->proxy_list->right.find(incomming_socket) != this->proxy_list->right.end()) {
         if(this->proxy_list->right.at(incomming_socket)->state() == QAbstractSocket::ConnectedState){
             this->proxy_list->right.at(incomming_socket)->write(answer);
-      //      qDebug()<<QDateTime::currentMSecsSinceEpoch()<<" "<< this->proxy_list->right.at(incomming_socket)->peerAddress()<<" "<<getpid();
         }
         return;
     }
-
-
     QStringList req_list = QString(answer).split(CRLF);
 
 
     //find ip addr of destination
     QString host  = "";
     qint64 port  = 0;
+    QString path = "";
     bool isHttps = false;
     if(req_list.first().contains(CONNECT_METHOD)){
         isHttps = true;
@@ -64,12 +73,20 @@ void proxy_server::readFromSocket(){
 
     }else if(req_list.first().contains(GET_METHOD) || req_list.first().contains(POST_METHOD) || req_list.first().contains(PUT_METHOD)
                || req_list.first().contains(DELETE_METHOD)){
-        QRegularExpression hostRegex(HOST_REGEX, QRegularExpression::MultilineOption);
+        QRegularExpression hostRegex(HOST_REGEX,QRegularExpression::UseUnicodePropertiesOption);
         QRegularExpressionMatch match = hostRegex.match(req_list[1]);
         if (match.hasMatch()) {
             isHttps = false;
             host = match.captured(1);
-            port = 80;//TODO::fill it with regix
+            port = match.captured(2).toULongLong();
+            path = match.captured(3);
+
+            // Output the extracted components
+            qDebug() << "Host:" << host;
+            qDebug() << "Port:" << port;
+            qDebug() << "Path:" <<  path;
+        }else{
+            qDebug()<<req_list[1];
         }
     }
 
@@ -77,6 +94,26 @@ void proxy_server::readFromSocket(){
         incomming_socket->close();
         incomming_socket->deleteLater();
         incomming_socket = nullptr;
+        return;
+    }
+
+
+    //check if this is the log path
+    if(path == LOG_PATH){
+        this->mut->lock();
+        QString answer;
+        while(!this->qu->empty()){
+            answer += QString(this->qu->front());
+            this->qu->pop();
+            answer += "\n";
+        }
+        if(incomming_socket->state() == QAbstractSocket::ConnectedState){
+        incomming_socket->write(answer.toStdString().c_str());
+        incomming_socket->flush();
+        incomming_socket->close();
+        }
+        incomming_socket->deleteLater();
+        this->mut->unlock();
         return;
     }
 

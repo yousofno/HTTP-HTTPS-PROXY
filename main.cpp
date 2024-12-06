@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sched.h>
 #include <iostream>
+#include <queue>
 
 void bind_to_cpu(int cpu_id) {
     cpu_set_t cpuset;
@@ -54,6 +55,8 @@ std::atomic_int number = 0;
 int num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 QTcpServer* server = new QTcpServer();
 proxy_server* child_server[num_cpus];
+QMutex* mutex = new QMutex();
+std::queue<QString>* qu = new std::queue<QString>();
 
 
 QObject::connect(server , &QTcpServer::newConnection , [server , &child_server , &number , num_cpus](){
@@ -77,7 +80,7 @@ for (int i = 0; i <= num_cpus-1; i++) {
     if (pid > 0) {
         // Child process
         bind_to_cpu(i); // Bind to specific CPU
-        child_server[i] = new proxy_server();
+        child_server[i] = new proxy_server(mutex , qu);
         std::cout << "Server running in PID " << getpid() << " on CPU " << i << std::endl;
     }
 }
