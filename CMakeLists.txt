@@ -17,9 +17,9 @@ find_package(Qt5 COMPONENTS
     find_package(QT NAMES Qt5 REQUIRED COMPONENTS Core Network)
     find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Network)
 
-
 add_executable(proxy_server main.cpp proxy_server.cpp proxy_server.h
-    defines.h)
+    defines.h
+    robust_lck.h)
 
 
 target_link_libraries(proxy_server Qt${QT_VERSION_MAJOR}::Core
