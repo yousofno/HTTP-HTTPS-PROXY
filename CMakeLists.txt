@@ -19,7 +19,9 @@ find_package(Qt5 COMPONENTS
 
 add_executable(proxy_server main.cpp proxy_server.cpp proxy_server.h
     defines.h
-    robust_lck.h)
+
+    circularqueue.h circularqueue.cpp
+)
 
 
 target_link_libraries(proxy_server Qt${QT_VERSION_MAJOR}::Core

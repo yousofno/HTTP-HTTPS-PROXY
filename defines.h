@@ -15,7 +15,6 @@ static const char INBOUND [] = "--inbound";
 static const char OUTBOUND [] = "--outbound";
 static const char OK [] = "HTTP/1.1 200 OK\r\n\r\n";
 static const char HOST_REGEX [] = R"rx(^(?:(?:https?:\/\/)?(?<host>[a-zA-Z0-9_\-\.]+))(?:\:(?<port>[0-9]+))?(?<path>\/[^\?\s]*)?)rx";
-static const char IP_PORT_REGEX [] = R"(([\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}):([\d]{1,5}))";
 static const char LOG_PATH [] = "/.svc/collect_logs";
 static const char HOST [] = "host";
 static const char PORT [] = "port";
