@@ -17,29 +17,29 @@ proxy_server::proxy_server(QString outboundHost,quint64 outboundPort, QObject *p
 }
 
 void* proxy_server::shared_mem_open_atomic_bool(){
-    int shm_fd = shm_open("proxy_ser_atomic" ,  O_RDWR , 0666);
+    int shm_fd = shm_open(PROXY_SER_ATOMIC_SHARED_NAME ,  O_RDWR , 0666);
     if(shm_fd == -1){
-        perror("shm_open");
+        perror(SHARED_MEMORY_OPEN);
         exit(1);
     }
     size_t array_size = sizeof(std::atomic<bool>);
     if(ftruncate(shm_fd , array_size) == -1){
-        perror("ftruncate");
+        perror(F_TRUNCATE);
         exit(1);
     }
 
     void* pointer = mmap(0 , array_size , PROT_READ | PROT_WRITE , MAP_SHARED , shm_fd , 0);
     if(pointer == MAP_FAILED){
-        perror("mmap");
+        perror(MEMORY_MAP);
         exit(1);
     }
     return pointer;
 }
 
 sem_t* proxy_server::shared_mem_open_lock(){
-    sem_t* sem = sem_open("proxy_ser_lck" , O_RDWR , 0666);
+    sem_t* sem = sem_open(LOCK_SHARED_NAME , O_RDWR , 0666);
     if(sem == SEM_FAILED){
-        perror("sem_open");
+        perror(SHARED_MEMORY_OPEN);
         exit(1);
     }
     return sem;
@@ -47,20 +47,20 @@ sem_t* proxy_server::shared_mem_open_lock(){
 
 }
 void* proxy_server::shared_mem_open_qu(){
-    int shm_fd = shm_open("proxy_ser_circ" ,  O_RDWR , 0666);
+    int shm_fd = shm_open(PROXY_SER_CIRCULAR_QUEUE_SHARED_NAME ,  O_RDWR , 0666);
     if(shm_fd == -1){
-        perror("shm_open");
+        perror(SHARED_MEMORY_OPEN);
         exit(1);
     }
     size_t array_size = sizeof(CircularQueue);
     if(ftruncate(shm_fd , array_size) == -1){
-        perror("ftruncate");
+        perror(F_TRUNCATE);
         exit(1);
     }
 
     void* pointer = mmap(0 , array_size , PROT_READ | PROT_WRITE , MAP_SHARED , shm_fd , 0);
     if(pointer == MAP_FAILED){
-        perror("mmap");
+        perror(MEMORY_MAP);
         exit(1);
     }
     return pointer;
@@ -138,15 +138,12 @@ void proxy_server::readFromSocket(){
     bool isHttps = false;
     HTTPRequestParser(answer , path , host , port , isHttps);
 
-
-
     if(host.isEmpty() || port <= 0){
         incomming_socket->close();
         incomming_socket->deleteLater();
         incomming_socket = nullptr;
         return;
     }
-
 
     //check if this is the log path
     if(path == LOG_PATH){
@@ -262,7 +259,7 @@ void proxy_server::HTTPRequestParser(const QString &request, QString &path, QStr
     bool flag = false;
     for(auto index : req){
         if(index.contains("Host:")){
-            QStringList hostList = index.split("Host:");
+            QStringList hostList = index.replace(" " , "").split("Host:");
             if(hostList.size()<2){
                 return;
             }

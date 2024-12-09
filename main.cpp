@@ -15,6 +15,9 @@
 #include <new>
 #include <semaphore.h>
 #include "circularqueue.h"
+#include <QProcess>
+#include <QObject>
+#include <cstdlib>
 void bind_to_cpu(int cpu_id) {
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
@@ -31,31 +34,33 @@ void args(int argc , char** argv , QString& in_host , quint64& in_port , QString
 
     //checking the switch cases
     if(argc < 3){
-        qDebug()<<"Invalid arguments";
+        qDebug()<<INVALID_ARGUMENTS;
         exit(0);
     }
+
+
     if(QString(argv[1]) != INBOUND){
-        qDebug()<<"Invalid arguments";
+        qDebug()<<INVALID_ARGUMENTS;
         exit(0);
     }
 
     QStringList lst_inbound = QString(argv[2]).split(":");
     if(lst_inbound.size()<2){
-        qDebug()<<"Invalid arguments";
+        qDebug()<<INVALID_ARGUMENTS;
         exit(0);
     }
     in_host = lst_inbound[0];
     in_port = lst_inbound[1].toULongLong();
 
     if(in_host.isEmpty() || in_port <= 0){
-        qDebug()<<"Invalid outbound Port or IP";
+        qDebug()<<INVALID_IP_PORT;
         exit(0);
     }
 
     if(argc > 3){
 
         if(QString(argv[3]) != OUTBOUND){
-            qDebug()<<"Invalid arguments";
+            qDebug()<<INVALID_ARGUMENTS;
             exit(0);
         }
 
@@ -63,7 +68,7 @@ void args(int argc , char** argv , QString& in_host , quint64& in_port , QString
 
         QStringList lst_outbound = QString(argv[4]).split(":");
         if(lst_outbound.size()<2){
-            qDebug()<<"Invalid arguments";
+            qDebug()<<INVALID_ARGUMENTS;
             exit(0);
         }
 
@@ -71,79 +76,78 @@ void args(int argc , char** argv , QString& in_host , quint64& in_port , QString
         out_port = lst_outbound[1].toULongLong();
 
         if(out_host.isEmpty() || out_port <= 0){
-            qDebug()<<"Invalid outbound Port or IP";
+            qDebug()<<INVALID_IP_PORT;
             exit(0);
         }
 
     }
 }
 
-void* shared_memory(int cpu_nums){
+void* create_proxy_ser_array_shared_memory(int cpu_nums){
 
-    int shm_fd = shm_open("proxy_ser" , O_CREAT | O_RDWR , 0666);
+    int shm_fd = shm_open(PROXY_SER_ARR_SHARED_NAME , O_CREAT | O_RDWR , 0666);
     if(shm_fd == -1){
-        perror("shm_open");
+        perror(SHARED_MEMORY_OPEN);
         exit(1);
     }
     size_t array_size = cpu_nums*sizeof(proxy_server);
     if(ftruncate(shm_fd , array_size) == -1){
-        perror("ftruncate");
+        perror(F_TRUNCATE);
         exit(1);
     }
 
     void* pointer = mmap(0 , array_size , PROT_READ | PROT_WRITE , MAP_SHARED , shm_fd , 0);
     if(pointer == MAP_FAILED){
-        perror("mmap");
+        perror(MEMORY_MAP);
         exit(1);
     }
     return pointer;
 }
 
-sem_t* shared_memory3(){
+void create_proxy_ser_lck_shared_memeory(){
 
-    sem_t* sem = sem_open("proxy_ser_lck" , O_CREAT , 0666 , 1);
+    sem_t* sem = sem_open(LOCK_SHARED_NAME , O_CREAT , 0666 , 1);
     if(sem == SEM_FAILED){
-        perror("sem_open");
+        perror(SHARED_MEMORY_OPEN);
         exit(1);
     }
-    return sem;
 }
-void* shared_memory4(){
+void* create_proxy_shared_atomic_var(){
 
-    int shm_fd = shm_open("proxy_ser_atomic" , O_CREAT | O_RDWR , 0666);
+    int shm_fd = shm_open(PROXY_SER_ATOMIC_SHARED_NAME , O_CREAT | O_RDWR , 0666);
     if(shm_fd == -1){
-        perror("shm_open");
+        perror(SHARED_MEMORY_OPEN);
         exit(1);
     }
     size_t array_size = sizeof(std::atomic<bool>);
     if(ftruncate(shm_fd , array_size) == -1){
-        perror("ftruncate");
+        perror(F_TRUNCATE);
         exit(1);
     }
 
     void* pointer = mmap(0 , array_size , PROT_READ | PROT_WRITE , MAP_SHARED , shm_fd , 0);
     if(pointer == MAP_FAILED){
-        perror("mmap");
+        perror(MEMORY_MAP);
         exit(1);
     }
     return pointer;
 }
-void* shared_memory5(){
+void* proxy_ser_shard_circular_queue(){
 
-    int shm_fd = shm_open("proxy_ser_circ" , O_CREAT | O_RDWR , 0666);
+    int shm_fd = shm_open(PROXY_SER_CIRCULAR_QUEUE_SHARED_NAME , O_CREAT | O_RDWR , 0666);
     if(shm_fd == -1){
-        perror("shm_open");
+        perror(SHARED_MEMORY_OPEN);
         exit(1);
     }
     size_t array_size = sizeof(CircularQueue);
     if(ftruncate(shm_fd , array_size) == -1){
-        perror("ftruncate");
+        perror(F_TRUNCATE);
         exit(1);
     }
 
     void* pointer = mmap(0 , array_size , PROT_READ | PROT_WRITE , MAP_SHARED , shm_fd , 0);
     if(pointer == MAP_FAILED){
-        perror("mmap");
+        perror(MEMORY_MAP);
         exit(1);
     }
     return pointer;
@@ -162,27 +166,23 @@ int main(int argc , char** argv) {
 
 
     QCoreApplication app(argc, argv);
-    sem_unlink("proxy_ser_lck");
-    shm_unlink("proxy_ser");
-    shm_unlink("proxy_ser_atomic");
-    shm_unlink("proxy_ser_circ");
 
-     sem_t* lock = (shared_memory3());
+
+    create_proxy_ser_lck_shared_memeory();
 
     quint64 number = 0;
     int num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
     QTcpServer* server = new QTcpServer();
 
 
-
-    CircularQueue* qu = reinterpret_cast<CircularQueue*>(shared_memory5());
+    CircularQueue* qu = reinterpret_cast<CircularQueue*>(proxy_ser_shard_circular_queue());
     new(qu)CircularQueue();
 
-    std::atomic<bool>* pointer_at = reinterpret_cast<std::atomic<bool>*>(shared_memory4());
+    std::atomic<bool>* pointer_at = reinterpret_cast<std::atomic<bool>*>(create_proxy_shared_atomic_var());
     new(pointer_at)std::atomic<bool>();
     pointer_at->store(false);
 
-    proxy_server* pointer = reinterpret_cast<proxy_server*>(shared_memory(num_cpus));
+    proxy_server* pointer = reinterpret_cast<proxy_server*>(create_proxy_ser_array_shared_memory(num_cpus));
 
     QObject::connect(server , &QTcpServer::newConnection , [server , pointer , &number , num_cpus](){
         int index = (number) % num_cpus;
